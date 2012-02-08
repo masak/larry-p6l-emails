@@ -1,0 +1,44 @@
+use 5.010;
+use strict;
+use warnings;
+
+use URI;
+use Web::Scraper;
+use Encode qw/decode_utf8/;
+
+binmode STDOUT, ':encoding(UTF-8)';
+
+my $emails = scraper {
+    process "table.as_lists_thread_navigation > tr", "emails[]" => scraper {
+        process '.as_artlink a[href]', link => '@href';
+        process ".as_tree_message_author", author => 'TEXT';
+    };
+};
+
+my $individual_email = scraper {
+    process "#as_list_article_date", date => 'TEXT';
+    process ".as_article_plain_text", contents => 'TEXT';
+};
+
+my $MAX = 1337; # hard-coded
+
+for my $page (reverse 1 .. $MAX) {
+    my $uri = "http://code.activestate.com/lists/perl6-language/?page=$page";
+    my $res = $emails->scrape( URI->new($uri) );
+
+    for my $email (@{$res->{emails}}) {
+        next unless $email->{link};
+        next unless $email->{author} =~ /\bWall\b/i;
+
+        my $mail_res = $individual_email->scrape( URI->new($email->{link}) );
+
+        say "=" x 30;
+        say decode_utf8 $mail_res->{date};
+        say "";
+        say decode_utf8 $mail_res->{contents};
+
+        sleep 1;
+    }
+
+    sleep 4 + (2 * rand);
+}
